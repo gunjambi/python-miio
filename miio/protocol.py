@@ -26,7 +26,6 @@ from construct import (
     Default,
     GreedyBytes,
     Hex,
-    IfThenElse,
     Int16ub,
     Int32ub,
     Pointer,
@@ -127,14 +126,6 @@ class Utils:
         datalen = x._.data.length  # type: int
         return datalen + 32
 
-    @staticmethod
-    def is_hello(x) -> bool:
-        """Return if packet is a hello packet."""
-        # not very nice, but we know that hellos are 32b of length
-        val = x.get("length", x.header.value["length"])
-
-        return val == 32
-
 
 class TimeAdapter(Adapter):
     """Adapter for timestamp conversion."""
@@ -223,10 +214,25 @@ Message = Struct(
             ),
         )
     ),
-    "checksum"
-    / IfThenElse(
-        Utils.is_hello,
-        Bytes(16),
-        Checksum(Bytes(16), Utils.md5, Utils.checksum_field_bytes),
+    "checksum" / Checksum(Bytes(16), Utils.md5, Utils.checksum_field_bytes),
+)
+
+DiscoveryReply = Struct(
+    "header"
+    / RawCopy(
+        Struct(
+            Const(0x2131, Int16ub),
+            "length" / Const(0x0020, Int16ub),
+            "unknown" / Default(Int32ub, 0x00000000),
+            "device_id" / Hex(Bytes(4)),
+            "ts"
+            / TimeAdapter(
+                Default(
+                    Int32ub,
+                    datetime.datetime.now(tz=datetime.timezone.utc),
+                )
+            ),
+        )
     ),
+    "token" / Bytes(16),
 )

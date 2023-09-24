@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 import construct
 
 from .exceptions import DeviceError, DeviceException, RecoverableError
-from .protocol import Message
+from .protocol import DiscoveryReply, Message
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class MiIOProtocol:
         self._device_ts: datetime = datetime.now(tz=timezone.utc)
         self._device_id = b""
 
-    def send_handshake(self, *, retry_count=3) -> Message:
+    def send_handshake(self, *, retry_count=3) -> DiscoveryReply:
         """Send a handshake to the device.
 
         This returns some information, such as device type and serial,
@@ -85,13 +85,15 @@ class MiIOProtocol:
             "Discovered %s with ts: %s, token: %s",
             binascii.hexlify(self._device_id).decode(),
             self._device_ts,
-            codecs.encode(m.checksum, "hex"),
+            codecs.encode(m.token, "hex"),
         )
 
         return m
 
     @staticmethod
-    def discover(addr: Optional[str] = None, timeout: int = 5) -> Any:
+    def discover(
+        addr: Optional[str] = None, timeout: int = 5
+    ) -> Optional[DiscoveryReply]:
         """Scan for devices in the network. This method is used to discover supported
         devices by sending a handshake message to the broadcast address on port 54321.
         If the target IP address is given, the handshake will be send as an unicast
@@ -118,7 +120,7 @@ class MiIOProtocol:
         while True:
             try:
                 data, recv_addr = s.recvfrom(1024)
-                m: Message = Message.parse(data)
+                m: DiscoveryReply = DiscoveryReply.parse(data)
                 _LOGGER.debug("Got a response: %s", m)
                 if not is_broadcast:
                     return m
@@ -128,7 +130,7 @@ class MiIOProtocol:
                         "  IP %s (ID: %s) - token: %s",
                         recv_addr[0],
                         binascii.hexlify(m.header.value.device_id).decode(),
-                        codecs.encode(m.checksum, "hex"),
+                        codecs.encode(m.token, "hex"),
                     )
                     seen_addrs.append(recv_addr[0])
             except socket.timeout:
